@@ -1,0 +1,35 @@
+name: Build MashaPoster.exe
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+  workflow_dispatch:   # lets you press "Run workflow" manually
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compile with built-in C# compiler
+        shell: pwsh
+        run: |
+          $csc = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+          & $csc /nologo /target:winexe /out:MashaPoster.exe `
+            /r:System.Windows.Forms.dll /r:System.Drawing.dll `
+            /resource:poster.jpg,poster.jpg Program.cs
+          if (-not (Test-Path MashaPoster.exe)) { throw "Build failed" }
+
+      - name: Upload exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: MashaPoster
+          path: MashaPoster.exe
+
+      - name: Attach exe to release (only when you push a tag like v1)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: MashaPoster.exe
