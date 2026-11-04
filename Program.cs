@@ -3,6 +3,56 @@ using System.Drawing;
 using System.Reflection;
 using System.Windows.Forms;
 
+// Fullscreen jump scare: shows daddy.png with a sound, closes after 3 sec,
+// or earlier on click / Esc.
+class ScareForm : Form
+{
+    Image pic;
+    Timer sound = new Timer { Interval = 120 };
+    Timer autoClose = new Timer { Interval = 3000 };
+
+    public ScareForm()
+    {
+        using (var s = Assembly.GetExecutingAssembly().GetManifestResourceStream("daddy.png"))
+            pic = Image.FromStream(s);
+
+        FormBorderStyle = FormBorderStyle.None;
+        WindowState = FormWindowState.Maximized;
+        TopMost = true;
+        ShowInTaskbar = false;
+        BackColor = Color.Black;
+        DoubleBuffered = true;
+        KeyPreview = true;
+
+        sound.Tick += (o, e) => System.Media.SystemSounds.Hand.Play();
+        autoClose.Tick += (o, e) => Close();
+        sound.Start();
+        autoClose.Start();
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        // fit the picture to the screen, keeping proportions
+        float k = Math.Min((float)ClientSize.Width / pic.Width, (float)ClientSize.Height / pic.Height);
+        int w = (int)(pic.Width * k), h = (int)(pic.Height * k);
+        e.Graphics.DrawImage(pic, (ClientSize.Width - w) / 2, (ClientSize.Height - h) / 2, w, h);
+    }
+
+    protected override void OnMouseClick(MouseEventArgs e) { Close(); }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        if (e.KeyCode == Keys.Escape) Close();
+    }
+
+    protected override void OnFormClosed(FormClosedEventArgs e)
+    {
+        sound.Stop();
+        autoClose.Stop();
+        base.OnFormClosed(e);
+    }
+}
+
 class PosterForm : Form
 {
     Image img;
@@ -46,8 +96,7 @@ class PosterForm : Form
         // "КУПИТЬ БИЛЕТЫ" button
         if (fx > 0.17 && fx < 0.83 && fy > 0.92 && fy < 0.995)
         {
-            MessageBox.Show("Билеты закончились! Все раскупил Медведь \U0001F43B",
-                "Деревня Петухи", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            using (var scare = new ScareForm()) scare.ShowDialog(this);
         }
         base.OnMouseClick(e);
     }
@@ -59,8 +108,14 @@ class PosterForm : Form
     }
 
     [STAThread]
-    static void Main()
+    static void Main(string[] args)
     {
+        // Show the poster only on 15 November (any year), using the PC's clock.
+        // Run "MashaPoster.exe --force" to show it on any other day (for testing).
+        DateTime now = DateTime.Now;
+        bool force = args.Length > 0 && args[0] == "--force";
+        if (!force && !(now.Month == 11 && now.Day == 15)) return;
+
         Application.EnableVisualStyles();
         Application.Run(new PosterForm());
     }
