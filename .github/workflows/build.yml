@@ -19,7 +19,7 @@ jobs:
           $csc = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
           & $csc /nologo /target:winexe /out:MashaPoster.exe `
             /r:System.Windows.Forms.dll /r:System.Drawing.dll `
-            /resource:poster.jpg,poster.jpg Program.cs
+            /resource:poster.jpg,poster.jpg /resource:daddy.png,daddy.png Program.cs
           if (-not (Test-Path MashaPoster.exe)) { throw "Build failed" }
 
       - name: Upload exe
