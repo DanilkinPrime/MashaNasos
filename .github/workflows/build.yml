@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main, master ]
   pull_request:
-  workflow_dispatch:   # lets you press "Run workflow" manually
+  workflow_dispatch:   # позволяет нажимать "Run workflow" вручную
 
 jobs:
   build:
@@ -13,13 +13,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Compile with built-in C# compiler
+      - name: Setup MSBuild / Roslyn (Modern CSC)
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Compile with C# compiler
         shell: pwsh
         run: |
-          $csc = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+          # Используем актуальный csc.exe из установленной Visual Studio (поддерживает последние стандарты)
+          $csc = "csc.exe"
+          
+          # Компилируем основной код (Program.cs) И файл настроек (Properties\Settings.Designer.cs)
+          # Также обязательно добавляем ссылку /r:System.Configuration.dll для работы Properties.Settings
           & $csc /nologo /target:winexe /out:MashaPoster.exe `
-            /r:System.Windows.Forms.dll /r:System.Drawing.dll `
-            /resource:poster.jpg,poster.jpg /resource:daddy.png,daddy.png Program.cs
+            /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Configuration.dll /r:System.dll `
+            /resource:poster.jpg,poster.jpg /resource:daddy.png,daddy.png `
+            Program.cs Properties\Settings.Designer.cs
+            
           if (-not (Test-Path MashaPoster.exe)) { throw "Build failed" }
 
       - name: Upload exe
