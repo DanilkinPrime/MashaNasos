@@ -1,4 +1,4 @@
-name: Build MashaPoster.exe
+name: Build MashaPoster.exe (.NET 10 Framework-Dependent)
 
 on:
   push:
@@ -13,23 +13,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup MSBuild / Roslyn (Modern CSC)
-        uses: microsoft/setup-msbuild@v2
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
 
-      - name: Compile with C# compiler
+      - name: Publish Single File EXE (Framework-Dependent)
         shell: pwsh
         run: |
-          # Используем актуальный csc.exe из установленной Visual Studio (поддерживает последние стандарты)
-          $csc = "csc.exe"
+          # Флаг --self-contained false убирает ядро .NET из сборки, делая файл легким (~5-10 МБ)
+          dotnet publish MashaPoster.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o output
           
-          # Компилируем основной код (Program.cs) И файл настроек (Properties\Settings.Designer.cs)
-          # Также обязательно добавляем ссылку /r:System.Configuration.dll для работы Properties.Settings
-          & $csc /nologo /target:winexe /out:MashaPoster.exe `
-            /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Configuration.dll /r:System.dll `
-            /resource:poster.jpg,poster.jpg /resource:daddy.png,daddy.png `
-            Program.cs Properties\Settings.Designer.cs
-            
-          if (-not (Test-Path MashaPoster.exe)) { throw "Build failed" }
+          # Копируем итоговый файл в корень для загрузки
+          Copy-Item "output\MashaPoster.exe" "MashaPoster.exe"
 
       - name: Upload exe
         uses: actions/upload-artifact@v4
